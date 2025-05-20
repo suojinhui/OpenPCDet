@@ -70,10 +70,10 @@ class SparseBasicBlock(spconv.SparseModule):
 class VoxelBackBone8x(nn.Module):
     def __init__(self, model_cfg, input_channels, grid_size, **kwargs):
         super().__init__()
-        self.model_cfg = model_cfg
+        self.model_cfg = model_cfg # NAME: VoxelBackBone8x
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
 
-        self.sparse_shape = grid_size[::-1] + [1, 0, 0]
+        self.sparse_shape = grid_size[::-1] + [1, 0, 0] # [41, 1600, 1408] 在原始网格的高度方向上增加了一维
 
         self.conv_input = spconv.SparseSequential(
             spconv.SubMConv3d(input_channels, 16, 3, padding=1, bias=False, indice_key='subm1'),
@@ -137,8 +137,9 @@ class VoxelBackBone8x(nn.Module):
             batch_dict:
                 encoded_spconv_tensor: sparse tensor
         """
-        voxel_features, voxel_coords = batch_dict['voxel_features'], batch_dict['voxel_coords']
-        batch_size = batch_dict['batch_size']
+        voxel_features, voxel_coords = batch_dict['voxel_features'], batch_dict['voxel_coords'] # (64000, 4), (64000, 4)
+        batch_size = batch_dict['batch_size'] # 4
+        # 根据voxel特征和坐标以及空间形状和batch，建立稀疏tensor
         input_sp_tensor = spconv.SparseConvTensor(
             features=voxel_features,
             indices=voxel_coords.int(),

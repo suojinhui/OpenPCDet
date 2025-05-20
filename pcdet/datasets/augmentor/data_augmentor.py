@@ -6,7 +6,7 @@ from PIL import Image
 from ...utils import common_utils
 from . import augmentor_utils, database_sampler
 
-
+# 提供openpcdet中的各种点云增强方法
 class DataAugmentor(object):
     def __init__(self, root_path, augmentor_configs, class_names, logger=None):
         self.root_path = root_path
@@ -53,9 +53,10 @@ class DataAugmentor(object):
     def __setstate__(self, d):
         self.__dict__.update(d)
 
+    # 随机世界翻转
     def random_world_flip(self, data_dict=None, config=None):
         if data_dict is None:
-            return partial(self.random_world_flip, config=config)
+            return partial(self.random_world_flip, config=config) # 创建时使用，预先导入config
         gt_boxes, points = data_dict['gt_boxes'], data_dict['points']
         for cur_axis in config['ALONG_AXIS_LIST']:
             assert cur_axis in ['x', 'y']
@@ -74,6 +75,7 @@ class DataAugmentor(object):
         data_dict['points'] = points
         return data_dict
 
+    # 随机世界旋转
     def random_world_rotation(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_rotation, config=config)
@@ -94,6 +96,7 @@ class DataAugmentor(object):
         data_dict['noise_rot'] = noise_rot
         return data_dict
 
+    # 随机世界缩放
     def random_world_scaling(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.random_world_scaling, config=config)

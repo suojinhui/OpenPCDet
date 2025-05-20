@@ -2,29 +2,34 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-
+# 以下注释针对SECOND
 class BaseBEVBackbone(nn.Module):
     def __init__(self, model_cfg, input_channels):
         super().__init__()
         self.model_cfg = model_cfg
-
+        # 读取下采样层参数
         if self.model_cfg.get('LAYER_NUMS', None) is not None:
             assert len(self.model_cfg.LAYER_NUMS) == len(self.model_cfg.LAYER_STRIDES) == len(self.model_cfg.NUM_FILTERS)
-            layer_nums = self.model_cfg.LAYER_NUMS
-            layer_strides = self.model_cfg.LAYER_STRIDES
-            num_filters = self.model_cfg.NUM_FILTERS
+            layer_nums = self.model_cfg.LAYER_NUMS # (5, 5)
+            layer_strides = self.model_cfg.LAYER_STRIDES # (1, 2)
+            num_filters = self.model_cfg.NUM_FILTERS # (128, 256)
         else:
             layer_nums = layer_strides = num_filters = []
 
+        # 读取上采样层参数
         if self.model_cfg.get('UPSAMPLE_STRIDES', None) is not None:
             assert len(self.model_cfg.UPSAMPLE_STRIDES) == len(self.model_cfg.NUM_UPSAMPLE_FILTERS)
-            num_upsample_filters = self.model_cfg.NUM_UPSAMPLE_FILTERS
-            upsample_strides = self.model_cfg.UPSAMPLE_STRIDES
+            num_upsample_filters = self.model_cfg.NUM_UPSAMPLE_FILTERS # (256, 256)
+            upsample_strides = self.model_cfg.UPSAMPLE_STRIDES # (1, 2)
         else:
             upsample_strides = num_upsample_filters = []
 
-        num_levels = len(layer_nums)
-        c_in_list = [input_channels, *num_filters[:-1]]
+        num_levels = len(layer_nums) # 2
+        c_in_list = [input_channels, *num_filters[:-1]] # (128, 128)
+        # 下采样分支一：(batch_size, 128*2, 200, 176) --> (batch,128, 200, 176)
+        # 下采样分支二：(batch_size, 128*2, 200, 176) --> (batch,128, 100, 88)
+        # 反卷积分支一：(batch, 128, 200, 176) --> (batch, 256, 200, 176)
+        # 反卷积分支二：(batch, 256, 100, 88) --> (batch, 256, 200, 176)
         self.blocks = nn.ModuleList()
         self.deblocks = nn.ModuleList()
         for idx in range(num_levels):

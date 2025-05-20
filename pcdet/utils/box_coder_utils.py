@@ -5,8 +5,8 @@ import torch
 class ResidualCoder(object):
     def __init__(self, code_size=7, encode_angle_by_sincos=False, **kwargs):
         super().__init__()
-        self.code_size = code_size
-        self.encode_angle_by_sincos = encode_angle_by_sincos
+        self.code_size = code_size # 7
+        self.encode_angle_by_sincos = encode_angle_by_sincos # Flase 一般是弧度制
         if self.encode_angle_by_sincos:
             self.code_size += 1
 
@@ -22,10 +22,12 @@ class ResidualCoder(object):
         anchors[:, 3:6] = torch.clamp_min(anchors[:, 3:6], min=1e-5)
         boxes[:, 3:6] = torch.clamp_min(boxes[:, 3:6], min=1e-5)
 
-        xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
-        xg, yg, zg, dxg, dyg, dzg, rg, *cgs = torch.split(boxes, 1, dim=-1)
+        xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1) # 截断anchors的[dx,dy,dz]
+        xg, yg, zg, dxg, dyg, dzg, rg, *cgs = torch.split(boxes, 1, dim=-1) # 截断boxes的[dx,dy,dz]
 
+        # 计算anchor对角线长度
         diagonal = torch.sqrt(dxa ** 2 + dya ** 2)
+        # 计算loss的公式，Δx,Δy,Δz,Δw,Δl,Δh,Δθ
         xt = (xg - xa) / diagonal
         yt = (yg - ya) / diagonal
         zt = (zg - za) / dza
@@ -37,7 +39,7 @@ class ResidualCoder(object):
             rt_sin = torch.sin(rg) - torch.sin(ra)
             rts = [rt_cos, rt_sin]
         else:
-            rts = [rg - ra]
+            rts = [rg - ra] # Δθ
 
         cts = [g - a for g, a in zip(cgs, cas)]
         return torch.cat([xt, yt, zt, dxt, dyt, dzt, *rts, *cts], dim=-1)
@@ -51,13 +53,17 @@ class ResidualCoder(object):
         Returns:
 
         """
+        # 分割anchor
         xa, ya, za, dxa, dya, dza, ra, *cas = torch.split(anchors, 1, dim=-1)
+        # 分割编码后的box
         if not self.encode_angle_by_sincos:
             xt, yt, zt, dxt, dyt, dzt, rt, *cts = torch.split(box_encodings, 1, dim=-1)
         else:
             xt, yt, zt, dxt, dyt, dzt, cost, sint, *cts = torch.split(box_encodings, 1, dim=-1)
 
+        # 计算anchor对角线长度
         diagonal = torch.sqrt(dxa ** 2 + dya ** 2)
+        # loss计算的逆变换:g表示gt，a表示anchor
         xg = xt * diagonal + xa
         yg = yt * diagonal + ya
         zg = zt * dza + za

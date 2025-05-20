@@ -12,6 +12,8 @@ from ...ops.iou3d_nms import iou3d_nms_utils
 from ...utils import box_utils, common_utils, calibration_kitti
 from pcdet.datasets.kitti.kitti_object_eval_python import kitti_common
 
+# 对每个gt的点云数量较少或者是困难等级的gt进行过滤。随后对每个类别的gt重新统计信息，包含采样数量、过滤后的gt数量（变化）、以及重新分配索引（从0开始分配）
+# 此过程中，会从全部训练集中随机抽取一部分GT，放到当前帧中进行训练
 class DataBaseSampler(object):
     def __init__(self, root_path, sampler_cfg, class_names, logger=None):
         self.root_path = root_path
@@ -41,6 +43,7 @@ class DataBaseSampler(object):
                 infos = pickle.load(f)
                 [self.db_infos[cur_class].extend(infos[cur_class]) for cur_class in class_names]
 
+        # 这里执行最小点过滤和困难样本过滤
         for func_name, val in sampler_cfg.PREPARE.items():
             self.db_infos = getattr(self, func_name)(self.db_infos, val)
 
@@ -459,7 +462,7 @@ class DataBaseSampler(object):
         sampled_gt_boxes2d = []
 
         for class_name, sample_group in self.sample_groups.items():
-            if self.limit_whole_scene:
+            if self.limit_whole_scene: # 限制一帧点云内，gt采样数
                 num_gt = np.sum(class_name == gt_names)
                 sample_group['sample_num'] = str(int(self.sample_class_num[class_name]) - num_gt)
             if int(sample_group['sample_num']) > 0:
@@ -468,7 +471,7 @@ class DataBaseSampler(object):
                 sampled_boxes = np.stack([x['box3d_lidar'] for x in sampled_dict], axis=0).astype(np.float32)
 
                 assert not self.sampler_cfg.get('DATABASE_WITH_FAKELIDAR', False), 'Please use latest codes to generate GT_DATABASE'
-
+                # 以下应该在执行碰撞检测
                 iou1 = iou3d_nms_utils.boxes_bev_iou_cpu(sampled_boxes[:, 0:7], existed_boxes[:, 0:7])
                 iou2 = iou3d_nms_utils.boxes_bev_iou_cpu(sampled_boxes[:, 0:7], sampled_boxes[:, 0:7])
                 iou2[range(sampled_boxes.shape[0]), range(sampled_boxes.shape[0])] = 0

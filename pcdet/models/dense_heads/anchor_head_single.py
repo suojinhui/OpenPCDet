@@ -9,10 +9,10 @@ class AnchorHeadSingle(AnchorHeadTemplate):
                  predict_boxes_when_training=True, **kwargs):
         super().__init__(
             model_cfg=model_cfg, num_class=num_class, class_names=class_names, grid_size=grid_size, point_cloud_range=point_cloud_range,
-            predict_boxes_when_training=predict_boxes_when_training
+            predict_boxes_when_training=predict_boxes_when_training # False
         )
 
-        self.num_anchors_per_location = sum(self.num_anchors_per_location)
+        self.num_anchors_per_location = sum(self.num_anchors_per_location) # 6
 
         self.conv_cls = nn.Conv2d(
             input_channels, self.num_anchors_per_location * self.num_class,
@@ -39,9 +39,9 @@ class AnchorHeadSingle(AnchorHeadTemplate):
         nn.init.normal_(self.conv_box.weight, mean=0, std=0.001)
 
     def forward(self, data_dict):
-        spatial_features_2d = data_dict['spatial_features_2d']
+        spatial_features_2d = data_dict['spatial_features_2d'] # (batch, 512, 200, 176)
 
-        cls_preds = self.conv_cls(spatial_features_2d)
+        cls_preds = self.conv_cls(spatial_features_2d) 
         box_preds = self.conv_box(spatial_features_2d)
 
         cls_preds = cls_preds.permute(0, 2, 3, 1).contiguous()  # [N, H, W, C]

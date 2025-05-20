@@ -76,6 +76,7 @@ class DataProcessor(object):
             cur_processor = getattr(self, cur_cfg.NAME)(config=cur_cfg)
             self.data_processor_queue.append(cur_processor)
 
+    # 遮罩范围外的点云
     def mask_points_and_boxes_outside_range(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.mask_points_and_boxes_outside_range, config=config)
@@ -92,6 +93,7 @@ class DataProcessor(object):
             data_dict['gt_boxes'] = data_dict['gt_boxes'][mask]
         return data_dict
 
+    # 打乱点云数据列表
     def shuffle_points(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.shuffle_points, config=config)
@@ -104,6 +106,7 @@ class DataProcessor(object):
 
         return data_dict
 
+    # 计算体素网格尺寸
     def transform_points_to_voxels_placeholder(self, data_dict=None, config=None):
         # just calculate grid size
         if data_dict is None:
@@ -150,6 +153,9 @@ class DataProcessor(object):
 
         points = data_dict['points']
         voxel_output = self.voxel_generator.generate(points)
+        # voxels: (num_voxels, max_points_per_voxel, 3 + C)
+        # coordinates: (num_voxels, 3)
+        # num_points: (num_voxels)
         voxels, coordinates, num_points = voxel_output
 
         if not data_dict['use_lead_xyz']:

@@ -1,13 +1,13 @@
 import numpy as np
 
-
+# 用于从原始的点云数据中取出需要的特征
 class PointFeatureEncoder(object):
     def __init__(self, config, point_cloud_range=None):
         super().__init__()
         self.point_encoding_config = config
-        assert list(self.point_encoding_config.src_feature_list[0:3]) == ['x', 'y', 'z']
-        self.used_feature_list = self.point_encoding_config.used_feature_list
-        self.src_feature_list = self.point_encoding_config.src_feature_list
+        assert list(self.point_encoding_config.src_feature_list[0:3]) == ['x', 'y', 'z'] # 确保前三维度是点云坐标
+        self.used_feature_list = self.point_encoding_config.used_feature_list # 需要用到的特征
+        self.src_feature_list = self.point_encoding_config.src_feature_list # 所提供的特征
         self.point_cloud_range = point_cloud_range
 
     @property

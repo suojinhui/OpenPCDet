@@ -13,17 +13,19 @@ class AnchorHeadTemplate(nn.Module):
         super().__init__()
         self.model_cfg = model_cfg
         self.num_class = num_class
-        self.class_names = class_names
+        self.class_names = class_names # ['Car','Pedestrian','Cyclist']
         self.predict_boxes_when_training = predict_boxes_when_training
         self.use_multihead = self.model_cfg.get('USE_MULTIHEAD', False)
 
-        anchor_target_cfg = self.model_cfg.TARGET_ASSIGNER_CONFIG
+        anchor_target_cfg = self.model_cfg.TARGET_ASSIGNER_CONFIG # AxisAlignedTargetAssigner
+        # 对生成的anchor和gt进行编码和解码
         self.box_coder = getattr(box_coder_utils, anchor_target_cfg.BOX_CODER)(
-            num_dir_bins=anchor_target_cfg.get('NUM_DIR_BINS', 6),
+            num_dir_bins=anchor_target_cfg.get('NUM_DIR_BINS', 6), # 2
             **anchor_target_cfg.get('BOX_CODER_CONFIG', {})
         )
 
         anchor_generator_cfg = self.model_cfg.ANCHOR_GENERATOR_CONFIG
+        # 针对不同类别生成不同的anchor和每个位置生成anchor的数量
         anchors, self.num_anchors_per_location = self.generate_anchors(
             anchor_generator_cfg, grid_size=grid_size, point_cloud_range=point_cloud_range,
             anchor_ndim=self.box_coder.code_size
@@ -31,6 +33,7 @@ class AnchorHeadTemplate(nn.Module):
         self.anchors = [x.cuda() for x in anchors]
         self.target_assigner = self.get_target_assigner(anchor_target_cfg)
 
+        # 前向传播结果字典初始化
         self.forward_ret_dict = {}
         self.build_losses(self.model_cfg.LOSS_CONFIG)
 
@@ -40,18 +43,22 @@ class AnchorHeadTemplate(nn.Module):
             anchor_range=point_cloud_range,
             anchor_generator_config=anchor_generator_cfg
         )
+        # 计算每个类别的特征图大小 176x200
         feature_map_size = [grid_size[:2] // config['feature_map_stride'] for config in anchor_generator_cfg]
+        # 计算所有3个类别的anchor和每个位置上的anchor数量
         anchors_list, num_anchors_per_location_list = anchor_generator.generate_anchors(feature_map_size)
 
+        # 如果anchor的维度不等于7，则补0
         if anchor_ndim != 7:
             for idx, anchors in enumerate(anchors_list):
                 pad_zeros = anchors.new_zeros([*anchors.shape[0:-1], anchor_ndim - 7])
                 new_anchors = torch.cat((anchors, pad_zeros), dim=-1)
                 anchors_list[idx] = new_anchors
 
-        return anchors_list, num_anchors_per_location_list
+        return anchors_list, num_anchors_per_location_list # list:3 [(1，200，176，1，2，7），(1，200，176，1，2，7），(1，200，176，1，2，7)], [2,2,2]
 
     def get_target_assigner(self, anchor_target_cfg):
+        # target_assigner初始化
         if anchor_target_cfg.NAME == 'ATSS':
             target_assigner = ATSSTargetAssigner(
                 topk=anchor_target_cfg.TOPK,
@@ -99,7 +106,7 @@ class AnchorHeadTemplate(nn.Module):
         return targets_dict
 
     def get_cls_layer_loss(self):
-        cls_preds = self.forward_ret_dict['cls_preds']
+        cls_preds = self.forward_ret_dict['cls_preds'] # (4, 248, 216, 18) 网络类别预测
         box_cls_labels = self.forward_ret_dict['box_cls_labels']
         batch_size = int(cls_preds.shape[0])
         cared = box_cls_labels >= 0  # [N, num_anchors]

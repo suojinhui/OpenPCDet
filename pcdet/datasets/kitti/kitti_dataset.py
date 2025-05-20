@@ -24,6 +24,10 @@ class KittiDataset(DatasetTemplate):
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
+
+        # root_path的路径是/data/kitti/
+        # kitti数据集一共三个文件夹"training"和"testing"、"ImageSets"
+        # 如果是训练集train，将文件的路径指为训练集training ，否则为测试集testing
         self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
 
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
@@ -61,6 +65,7 @@ class KittiDataset(DatasetTemplate):
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
     def get_lidar(self, idx):
+        # /data/kitti/training/velodyne/xxxxxx.bin
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
         return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
@@ -83,11 +88,15 @@ class KittiDataset(DatasetTemplate):
     def get_image_shape(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
         assert img_file.exists()
+        # 该函数的返回值是：array([375, 1242], dtype=int32)
         return np.array(io.imread(img_file).shape[:2], dtype=np.int32)
 
     def get_label(self, idx):
         label_file = self.root_split_path / 'label_2' / ('%s.txt' % idx)
         assert label_file.exists()
+        # 调用get_objects_from_label函数，首先读取该文件的所有行赋值为 lines
+        # 在对lines中的每一个line（一个object的参数）作为object3d类的参数 进行遍历，
+        # 最后返回：objects[]列表 ,里面是当前文件里所有物体的属性值，如：type、x,y,等
         return object3d_kitti.get_objects_from_label(label_file)
 
     def get_depth_map(self, idx):
@@ -140,9 +149,13 @@ class KittiDataset(DatasetTemplate):
 
         """
         pts_img, pts_rect_depth = calib.rect_to_img(pts_rect)
+        # 判断投影点是否在图像范围内
         val_flag_1 = np.logical_and(pts_img[:, 0] >= 0, pts_img[:, 0] < img_shape[1])
         val_flag_2 = np.logical_and(pts_img[:, 1] >= 0, pts_img[:, 1] < img_shape[0])
         val_flag_merge = np.logical_and(val_flag_1, val_flag_2)
+        # 深度 > 0, 才可以判断在fov视角
+        # pts_valid_flag=array([ True,   True,  True, False,   True, True,.....])之类的，一共有M个 
+        # 用于判断该点云能否有效 （是否用于训练）
         pts_valid_flag = np.logical_and(val_flag_merge, pts_rect_depth >= 0)
 
         return pts_valid_flag
@@ -221,6 +234,8 @@ class KittiDataset(DatasetTemplate):
             infos = executor.map(process_single_scene, sample_id_list)
         return list(infos)
 
+    # 用trainfile的groundtruth产生groundtruth_database，
+    # 只保存训练数据中的gt_box及其包围的点的信息，用于数据增强
     def create_groundtruth_database(self, info_path=None, used_classes=None, split='train'):
         import torch
 
@@ -299,6 +314,7 @@ class KittiDataset(DatasetTemplate):
             }
             return ret_dict
 
+        # 接收模型预测的在统一坐标系下表示的3D检测框，并转回自己所需格式,生成一帧的预测字典
         def generate_single_sample_dict(batch_index, box_dict):
             pred_scores = box_dict['pred_scores'].cpu().numpy()
             pred_boxes = box_dict['pred_boxes'].cpu().numpy()
@@ -358,6 +374,7 @@ class KittiDataset(DatasetTemplate):
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
+        # 根据目标检测的真值和预测值，计算四个检测指标 分别为 bbox、bev、3d和aos
         ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
 
         return ap_result_str, ap_dict
@@ -365,9 +382,10 @@ class KittiDataset(DatasetTemplate):
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
             return len(self.kitti_infos) * self.total_epochs
-
+        #等于返回训练帧的总个数，等于图片的总个数，帧的总个数
         return len(self.kitti_infos)
 
+    # 将点云与3D标注框均转至前述统一坐标定义下，送入数据基类提供的 self.prepare_data()
     def __getitem__(self, index):
         # index = 4
         if self._merge_all_iters_to_one_epoch:
@@ -390,6 +408,9 @@ class KittiDataset(DatasetTemplate):
             annos = common_utils.drop_info_with_name(annos, name='DontCare')
             loc, dims, rots = annos['location'], annos['dimensions'], annos['rotation_y']
             gt_names = annos['name']
+            # 构造camera系下的label（N,7），再转换到lidar系下
+            # boxes3d_camera: (N, 7) [x, y, z, l, h, w, r] in rect camera coords
+            # boxes3d_lidar: [x, y, z, dx, dy, dz, heading], (x, y, z) is the box center
             gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
             gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
 
@@ -404,6 +425,7 @@ class KittiDataset(DatasetTemplate):
             if road_plane is not None:
                 input_dict['road_plane'] = road_plane
 
+        # 加入点云，如果要求FOV视角，则对点云进行裁剪后加入input_dict
         if "points" in get_item_list:
             points = self.get_lidar(sample_idx)
             if self.dataset_cfg.FOV_POINTS_ONLY:

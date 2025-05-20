@@ -17,7 +17,7 @@ GET_ITEM_LIST: ["points"]
 FOV_POINTS_ONLY: True
 
 DATA_AUGMENTOR:
-    DISABLE_AUG_LIST: ['placeholder']
+    DISABLE_AUG_LIST: ['placeholder'] # 占位符
     AUG_CONFIG_LIST:
         - NAME: gt_sampling
           USE_ROAD_PLANE: True
